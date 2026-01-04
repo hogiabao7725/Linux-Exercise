@@ -20,7 +20,7 @@ readonly CLEANUP_DELAY=2
 
 # Detect scheduler: env var > kernel version
 detect_scheduler() {
-    [ -n "$SCHEDULER_TYPE" ] && {
+    [ -n "${SCHEDULER_TYPE:-}" ] && {
         case "${SCHEDULER_TYPE^^}" in
             BORE|BORE_SCHEDULER) echo "BORE"; return ;;
             DEFAULT|EEVDF|CFS) echo "DEFAULT"; return ;;
@@ -177,7 +177,7 @@ main() {
     echo "" | tee -a "$RESULT_FILE"
 
     log "Starting responsiveness benchmark on $KERNEL_TYPE scheduler"
-    [ -z "$SCHEDULER_TYPE" ] && print_info "Tip: Set SCHEDULER_TYPE=\"BORE\" or \"DEFAULT\" to explicitly specify scheduler"
+    [ -z "${SCHEDULER_TYPE:-}" ] && print_info "Tip: Set SCHEDULER_TYPE=\"BORE\" or \"DEFAULT\" to explicitly specify scheduler"
 
     print_info "Checking required tools..."
     echo "Checking required tools..." | tee -a "$RESULT_FILE"

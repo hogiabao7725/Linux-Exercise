@@ -22,7 +22,7 @@ detect_scheduler() {
     local KERNEL_VERSION=$(uname -r)
 
     # Method 1: Environment variable
-    [ -n "$SCHEDULER_TYPE" ] && {
+    [ -n "${SCHEDULER_TYPE:-}" ] && {
         case "${SCHEDULER_TYPE^^}" in
             BORE|BORE_SCHEDULER) echo "BORE (from env: $SCHEDULER_TYPE)"; return ;;
             DEFAULT|EEVDF|CFS) echo "DEFAULT (from env: $SCHEDULER_TYPE)"; return ;;
@@ -70,7 +70,7 @@ main() {
 
     # Method 1: Environment variable
     print_info "Method 1: Environment Variable"
-    [ -n "$SCHEDULER_TYPE" ] && echo -e "  SCHEDULER_TYPE=${GREEN}$SCHEDULER_TYPE${R}" || echo -e "  SCHEDULER_TYPE=${YELLOW}(not set)${R}"
+    [ -n "${SCHEDULER_TYPE:-}" ] && echo -e "  SCHEDULER_TYPE=${GREEN}$SCHEDULER_TYPE${R}" || echo -e "  SCHEDULER_TYPE=${YELLOW}(not set)${R}"
     echo ""
 
     # Method 2: Kernel config file
@@ -134,7 +134,7 @@ main() {
         [ -n "$method" ] && echo "  Detection method: $method"
         echo "  Your test scripts will create files with '_BORE_' suffix"
     elif echo "$detected" | grep -qi "DEFAULT"; then
-        [ -z "$SCHEDULER_TYPE" ] && {
+        [ -z "${SCHEDULER_TYPE:-}" ] && {
             print_info "DEFAULT scheduler detected (or fallback)"
             echo "  If you're running BORE kernel but it's not detected:"
             echo -e "  ${CYAN}export SCHEDULER_TYPE=\"BORE\"${R}"
