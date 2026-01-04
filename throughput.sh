@@ -1,6 +1,6 @@
 #!/bin/bash
 # throughput.sh - Measure scheduler throughput and fairness
-# Usage: SCHEDULER_TYPE="BORE"|"DEFAULT" ./throughput.sh
+# Usage: ./throughput.sh
 
 set -euo pipefail
 
@@ -18,15 +18,21 @@ readonly SYSBENCH_TIMEOUT=60
 readonly FAIRNESS_TASKS=8
 readonly FAIRNESS_COMPUTATION_SIZE=2000000
 
-# Detect scheduler: env var > kernel version
+# Detect scheduler: Method 1 (kernel config) > Method 2 (kernel version)
 detect_scheduler() {
-    [ -n "${SCHEDULER_TYPE:-}" ] && {
-        case "${SCHEDULER_TYPE^^}" in
-            BORE|BORE_SCHEDULER) echo "BORE"; return ;;
-            DEFAULT|EEVDF|CFS) echo "DEFAULT"; return ;;
-        esac
+    local kernel_version=$(uname -r)
+    local config_file="/boot/config-${kernel_version}"
+    
+    # Method 1: Kernel config file
+    [ -f "$config_file" ] && {
+        grep -qiE "CONFIG_SCHED_BORE\s*=\s*y" "$config_file" 2>/dev/null && { echo "BORE"; return; }
+        grep -qiE "CONFIG_SCHED_EEVDF\s*=\s*y" "$config_file" 2>/dev/null && { echo "DEFAULT"; return; }
     }
-    [[ $KERNEL_VERSION == *"cachyos"* ]] || [[ $KERNEL_VERSION == *"bore"* ]] && { echo "BORE"; return; }
+    
+    # Method 2: Kernel version string
+    [[ "$kernel_version" == *"cachyos"* ]] || [[ "$kernel_version" == *"bore"* ]] && { echo "BORE"; return; }
+    
+    # Fallback
     echo "DEFAULT"
 }
 
@@ -218,7 +224,6 @@ main() {
     echo "" | tee -a "$RESULT_FILE"
 
     log "Starting throughput benchmark on $KERNEL_TYPE scheduler"
-    [ -z "${SCHEDULER_TYPE:-}" ] && print_info "Tip: Set SCHEDULER_TYPE=\"BORE\" or \"DEFAULT\" to explicitly specify scheduler"
 
     print_info "Checking required tools..."
     echo "Checking required tools..." | tee -a "$RESULT_FILE"
