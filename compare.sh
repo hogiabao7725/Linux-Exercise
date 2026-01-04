@@ -4,60 +4,84 @@
 
 set -euo pipefail
 
-# ============================================================================
-# Colors & Print Functions
-# ============================================================================
+# Colors
 readonly R='\033[0m' B='\033[1m'
 readonly RED='\033[0;31m' GREEN='\033[0;32m' YELLOW='\033[0;33m' BLUE='\033[0;34m' CYAN='\033[0;36m'
+
+# Print functions
 print_error() { echo -e "${RED}✗${R} ${RED}$1${R}"; }
 print_warning() { echo -e "${YELLOW}⚠${R} ${YELLOW}$1${R}"; }
 print_info() { echo -e "${CYAN}ℹ${R} $1"; }
 print_header() {
-    echo ""; echo -e "${B}${BLUE}================================================================"
-    echo -e "$1"; echo -e "================================================================${R}"
+    echo ""
+    echo -e "${B}${BLUE}================================================================"
+    echo -e "$1"
+    echo -e "================================================================${R}"
 }
 print_better() { echo -e "  ${GREEN}→ $2: $1${R}"; }
 print_worse() { echo -e "  ${RED}→ $2: $1${R}"; }
 
-# ============================================================================
-# Utility Functions
-# ============================================================================
+# Utility functions
 find_latest_file() { ls -t ${1}*.txt 2>/dev/null | head -1; }
+
 extract_scheduler_type() {
     echo "$1" | grep -qi "BORE" && echo "BORE" && return
     echo "$1" | grep -qi "DEFAULT" && echo "DEFAULT" && return
     echo "UNKNOWN"
 }
+
 extract_test_section() { grep -A "${3:-20}" "TEST $2:" "$1" 2>/dev/null || echo ""; }
+
 extract_number() { echo "$1" | grep -oE "$2" | grep -oE '[0-9]+\.?[0-9]*' | head -1; }
+
 extract_time() {
     local time=$(extract_number "$1" "Time: [0-9]+\\.[0-9]+")
     [ -z "$time" ] && time=$(extract_number "$1" "Elapsed time: [0-9]+\\.[0-9]+")
     echo "$time"
 }
+
 extract_cyclictest_metric() { echo "$1" | grep -oE "${2}:\s*[0-9]+" | grep -oE "[0-9]+" | head -1; }
+
+extract_nth_number() {
+    local n="$1"
+    awk -v n="$n" '{
+        count = 0
+        for(i=1; i<=NF; i++) {
+            if ($i ~ /^[0-9]+\.?[0-9]*$/) {
+                nums[++count] = $i
+            }
+        }
+        if (count >= n) print nums[n]
+    }'
+}
+
 extract_bogo_ops() {
-    local section=$(extract_test_section "$1" "1" 40)
-    local result=$(extract_number "$section" "bogo[-\s]?ops?/s")
-    [ -z "$result" ] && result=$(extract_number "$(grep -iE "bogo[-\s]?ops?" "$1" 2>/dev/null)" "[0-9]+\\.[0-9]*")
+    local result=$(grep "stress-ng: metrc:" "$1" 2>/dev/null | grep -E "cpu[[:space:]]" | extract_nth_number 5 | head -1)
+    [ -z "$result" ] && {
+        local log_file="${1%.txt}.log"
+        [ -f "$log_file" ] && result=$(grep "stress-ng: metrc:" "$log_file" 2>/dev/null | grep -E "cpu[[:space:]]" | extract_nth_number 5 | head -1)
+    }
     echo "$result"
 }
+
 extract_stddev() { grep "Standard deviation:" "$1" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1; }
+
 extract_sysbench_events() {
-    local section=$(extract_test_section "$1" "4" 30)
-    local result=$(extract_number "$section" "events per second")
-    [ -z "$result" ] && result=$(extract_number "$(grep -A 30 "TEST 4:" "$1" 2>/dev/null)" "events.*second")
+    local result=$(grep "events per second:" "$1" 2>/dev/null | grep -oE "[0-9]+\.[0-9]+" | head -1)
+    [ -z "$result" ] && {
+        local section=$(extract_test_section "$1" "4" 30)
+        result=$(echo "$section" | grep "events per second" | grep -oE "[0-9]+\.[0-9]+" | head -1)
+    }
     echo "$result"
 }
+
 calculate_percentage() {
     local v1="$1" v2="$2"
     [ -z "$v1" ] || [ -z "$v2" ] || [ "$v2" = "0" ] && { echo "N/A"; return; }
     echo "scale=2; ($v1 - $v2) / $v2 * 100" | bc 2>/dev/null
 }
 
-# ============================================================================
-# Comparison Functions
-# ============================================================================
+# Comparison functions
 compare_time() {
     local s1="$1" s2="$2" sched1="$3" sched2="$4" test_name="$5"
     local t1=$(extract_time "$s1") t2=$(extract_time "$s2")
@@ -101,9 +125,6 @@ compare_cyclictest_metric() {
     fi
 }
 
-# ============================================================================
-# Comparison Functions
-# ============================================================================
 compare_responsiveness() {
     local f1="$1" f2="$2" s1=$(extract_scheduler_type "$f1") s2=$(extract_scheduler_type "$f2")
     print_header "RESPONSIVENESS COMPARISON: ${s1} vs ${s2}"
@@ -168,9 +189,6 @@ compare_throughput() {
     compare_time "$(extract_test_section "$f1" "5" 20)" "$(extract_test_section "$f2" "5" 20)" "$s1" "$s2" "Test 5"
 }
 
-# ============================================================================
-# Main Function
-# ============================================================================
 detect_file_type() {
     echo "$1" | grep -qi "responsiveness" && echo "responsiveness" && return
     echo "$1" | grep -qi "throughput" && echo "throughput" && return
@@ -194,7 +212,6 @@ auto_detect_files() {
 main() {
     local f1="" f2="" type=""
     
-    # Parse arguments
     case $# in
         2) f1="$1"; f2="$2" ;;
         1) [ "$1" = "responsiveness" ] || [ "$1" = "throughput" ] && type="$1" || { print_error "Invalid argument: $1"; exit 1; } ;;
@@ -203,7 +220,6 @@ main() {
     
     command -v bc &> /dev/null || { print_error "bc is required"; exit 1; }
     
-    # Auto-detect files if type specified
     if [ -n "$type" ]; then
         print_info "Auto-detecting latest benchmark files..."
         local result=$(auto_detect_files "$type")
@@ -212,11 +228,9 @@ main() {
         f2=$(echo "$result" | cut -d'|' -f2)
     fi
     
-    # Validate files
     [ ! -f "$f1" ] && { print_error "File not found: $f1"; exit 1; }
     [ ! -f "$f2" ] && { print_error "File not found: $f2"; exit 1; }
     
-    # Detect and compare
     local t1=$(detect_file_type "$f1") t2=$(detect_file_type "$f2")
     [ "$t1" != "$t2" ] && { print_error "Files are of different types"; exit 1; }
     
