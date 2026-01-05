@@ -40,7 +40,10 @@ install_package_pacman() {
 }
 
 check_and_install() {
-    local tool="$1" pkg_apt="$2" pkg_pacman="$3" pkg_name="${4:-$tool}"
+    local tool="$1"
+    local pkg_apt="$2"
+    local pkg_pacman="$3"
+    local pkg_name="${4:-$tool}"
 
     check_command "$tool" && { print_success "$tool is already installed"; return 0; }
 
